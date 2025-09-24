@@ -34,6 +34,7 @@ Route::post('/payment/createOrder', [MbmePaymentController::class, 'createOrder'
 Route::post('/payment/createLink', [MbmePaymentController::class, 'createLink'])->name('payment.createLink');
 Route::post('/payment/status', [MbmePaymentController::class, 'checkStatus'])->name('payment.status');
 Route::post('/payment/refund', [MbmePaymentController::class, 'refund'])->name('payment.refund');
+
     
 });
 

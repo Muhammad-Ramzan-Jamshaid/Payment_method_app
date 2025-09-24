@@ -77,10 +77,11 @@ class MbmePaymentController extends Controller
                 ],
 
                 'response_config' => [
-                    'success_redirect_url' => 'https://api.ipayfin.com/pages/new_payment_page_success.php',
+                    'success_redirect_url' => 'https://www.youtube.com/watch?v=6C4yqJMvmz8&list=PLRB0wzP8AS_GfoZTiqsY1397H8LcXgkMZ&index=14' ,
                     'failure_redirect_url' => 'http://google.com',
                 ],
             ];
+
 
             $secureSign = $this->generateSignature($signingPayload, $this->mbmeConfig['key']);
 
@@ -120,15 +121,10 @@ class MbmePaymentController extends Controller
                     'currency' => $validated['transaction_info']['currency']
                 ]);
 
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Order created successfully',
-                    'data' => [
-                        'oid' => $oid,
-                        'uid' => $this->mbmeConfig['uid'],
-                        'timestamp' => $timestamp,
-                        'status' => $responseData['status']
-                    ]
+                return view('payment_iframe', [
+                    'oid' => $oid,
+                    'uid' => $this->mbmeConfig['uid'],
+                    'timestamp' => $timestamp
                 ]);
             } else {
                 Log::error('MBME Order Creation Failed', [
