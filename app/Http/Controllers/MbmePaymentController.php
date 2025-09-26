@@ -77,8 +77,8 @@ class MbmePaymentController extends Controller
                 ],
 
                 'response_config' => [
-                    'success_redirect_url' => 'https://www.youtube.com/watch?v=6C4yqJMvmz8&list=PLRB0wzP8AS_GfoZTiqsY1397H8LcXgkMZ&index=14' ,
-                    'failure_redirect_url' => 'http://google.com',
+                    'success_redirect_url' => 'https://api.ipayfin.com/pages/new_payment_page_success.php',
+                    'failure_redirect_url' => 'https://google.com',
                 ],
             ];
 
@@ -418,112 +418,120 @@ class MbmePaymentController extends Controller
     }
 
     public function initiateRefundPayment(Request $request)
-    {
-        try {
-            // Validate the incoming request
-            $validated = $request->validate([
-                'oid'=> 'required|string|max:255',
-            ]);
+{
+    try {
+        // Validate request
+        $validated = $request->validate([
+            'oid'=> 'required|string|max:255',
+        ]);
 
-            $timestamp  = Carbon::now()->toISOString();
+        $timestamp  = Carbon::now()->toISOString();
 
-            $signingPayload = [
-                'uid'             => $this->mbmeConfig['uid'],
-                'oid'             => $request->oid,
-                'timestamp'       => $timestamp,
-                'request_method'  => 'process_refund',
-            ];
+        // Dummy exchange rates (for example only, ideally get from live API)
+        $exchangeRatesToKWD = [
+            'USD' => 0.31,   // 1 USD = 0.31 KWD
+            'AED' => 0.083,  // 1 AED = 0.083 KWD
+            'PKR' => 0.0010, // 1 PKR = 0.0010 KWD
+            'KWD' => 1,      // already KWD
+        ];
 
-            $secureSign = $this->generateSignature($signingPayload, $this->mbmeConfig['key']);
+        // Pehle transaction ka detail le lo (maan lo tumhare DB me stored hai)
+        // Example: fetch payment record
+        $payment = Payment::where('oid', $request->oid)->first();
 
-            $payload = $signingPayload;
-            unset($payload['key'], $payload['algorithm']);
-            $payload['secure_sign'] = $secureSign;
-
-            $response = Http::withHeaders([
-                'Content-Type'  => 'application/json',
-                'Authorization' => 'Bearer '.$this->mbmeConfig['bearer_token'],
-            ])->timeout(30)->post($this->mbmeConfig['api_url_payment'], $payload);
-
-            if (!$response->successful()) {
-                Log::error('MBME API Error', [
-                    'status' => $response->status(),
-                    'response' => $response->body()
-                ]);
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Payment gateway error',
-                    'error' => 'API request failed'
-                ], 500);
-            }
-
-            $responseData = $response->json();
-            
-            $data = $responseData['data'] ?? [];
-
-            // Extract basic payment info
-            $status = $data['status'] ?? null;
-            $statusMessage = $data['status_message'] ?? 'Unknown status';
-            $cardLast4 = $data['card_last4'] ?? null;
-            $amount = $data['amount'] ?? null;
-            $currency = $data['currency'] ?? null;
-
-            if (strtoupper($status) === 'APPROVED') {
-                return response()->json([
-                    'success' => true,
-                    'message' => $statusMessage,
-                    'data' => [
-                        'card_last4' => $cardLast4,
-                        'amount' => $amount,
-                        'currency' => $currency,
-                    ]
-                ]);
-            }
-
-            if (strtoupper($status) === 'FAILED' || strtoupper($status) === 'DECLINED') {
-                return response()->json([
-                    'success' => false,
-                    'message' => $statusMessage,
-                    'data' => [
-                        'card_last4' => $cardLast4,
-                        'amount' => $amount,
-                        'currency' => $currency,
-                    ]
-                ], 400);
-            }
-
-            // Default fallback
+        if (!$payment) {
             return response()->json([
                 'success' => false,
-                'message' => 'Unknown payment status',
-                'data' => [
-                    'card_last4' => $cardLast4,
-                    'amount' => $amount,
-                    'currency' => $currency,
-                ]
-            ], 400);
+                'message' => 'Payment record not found for refund',
+            ], 404);
+        }
 
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $e->errors()
-            ], 422);
+        $originalAmount   = $payment->amount;   // example DB field
+        $originalCurrency = strtoupper($payment->currency);
 
-        } catch (\Exception $e) {
-            Log::error('Payment Status Check Error', [
-                'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+        // Convert to KWD
+        $convertedAmount = $originalAmount;
+        if (isset($exchangeRatesToKWD[$originalCurrency])) {
+            $convertedAmount = $originalAmount * $exchangeRatesToKWD[$originalCurrency];
+        }
+
+        // Payload
+        $signingPayload = [
+            'uid'             => $this->mbmeConfig['uid'],
+            'oid'             => $request->oid,
+            'timestamp'       => $timestamp,
+            'request_method'  => 'process_refund',
+            'amount'          => round($convertedAmount, 3), // 3 decimals for KWD
+            'currency'        => 'KWD',
+        ];
+
+        $secureSign = $this->generateSignature($signingPayload, $this->mbmeConfig['key']);
+
+        $payload = $signingPayload;
+        unset($payload['key'], $payload['algorithm']);
+        $payload['secure_sign'] = $secureSign;
+
+        $response = Http::withHeaders([
+            'Content-Type'  => 'application/json',
+            'Authorization' => 'Bearer '.$this->mbmeConfig['bearer_token'],
+        ])->timeout(30)->post($this->mbmeConfig['api_url_payment'], $payload);
+
+        if (!$response->successful()) {
+            Log::error('MBME API Error', [
+                'status' => $response->status(),
+                'response' => $response->body()
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Something went wrong while checking payment status',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+                'message' => 'Payment gateway error',
+                'error' => 'API request failed'
             ], 500);
         }
+
+        $responseData = $response->json();
+        $data = $responseData['data'] ?? [];
+
+        $status = $data['status'] ?? null;
+        $statusMessage = $data['status_message'] ?? 'Unknown status';
+        $cardLast4 = $data['card_last4'] ?? null;
+
+        if (strtoupper($status) === 'APPROVED') {
+            return response()->json([
+                'success' => true,
+                'message' => $statusMessage,
+                'data' => [
+                    'card_last4' => $cardLast4,
+                    'amount' => $convertedAmount,
+                    'currency' => 'KWD',
+                ]
+            ]);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => $statusMessage,
+            'data' => [
+                'card_last4' => $cardLast4,
+                'amount' => $convertedAmount,
+                'currency' => 'KWD',
+            ]
+        ], 400);
+
+    } catch (\Exception $e) {
+        Log::error('Refund Error', [
+            'message' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Something went wrong during refund',
+            'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+        ], 500);
     }
+}
+
 
     /**
      * Generate a secure signature for MBME API
