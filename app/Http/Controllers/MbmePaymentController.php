@@ -14,18 +14,18 @@ class MbmePaymentController extends Controller
 {
 
     private $mbmeConfig = [
-        //        'api_url' => 'https://pgapi.mbmepay.ae/api/v2/payments/create-order',
-        //        'api_url_payment' => 'https://pgapi.mbmepay.ae/api/v2/order',
-        //        'bearer_token' => 'IjTcRdZ3bHY5FUA75wAc7r4+snfu8O+HWRKqLliYj48=',
-        //        'key' => '68a4390d0a36ce343333ee8c',
-        //        'uid' => '129',
-        //        'algorithm' => 'SHA-256'
-        'api_url' => 'https://pgapi.mbme.org/api/v2/payments/create-order',
-        'api_url_payment' => 'https://pgapi.mbme.org/api/v2/order',
-        'bearer_token' => '4XvqQpDsSa5nF0kjE7ypKSwGagefxFL2Iws1mwP7YZs=',
-        'key' => '68a7289aedab8f2be559955b',
-        'uid' => '158',
-        'algorithm' => 'SHA-256'
+//        'api_url' => 'https://pgapi.mbmepay.ae/api/v2/payments/create-order',
+//        'api_url_payment' => 'https://pgapi.mbmepay.ae/api/v2/order',
+//        'bearer_token' => 'IjTcRdZ3bHY5FUA75wAc7r4+snfu8O+HWRKqLliYj48=',
+//        'key' => '68a4390d0a36ce343333ee8c',
+//        'uid' => '129',
+//        'algorithm' => 'SHA-256'
+         'api_url' => 'https://pgapi.mbme.org/api/v2/payments/create-order',
+         'api_url_payment' => 'https://pgapi.mbme.org/api/v2/order',
+         'bearer_token' => '4XvqQpDsSa5nF0kjE7ypKSwGagefxFL2Iws1mwP7YZs=',
+         'key' => '68a7289aedab8f2be559955b',
+         'uid' => '158',
+         'algorithm' => 'SHA-256'
     ];
 
     public function createOrder(Request $request)
@@ -77,20 +77,16 @@ class MbmePaymentController extends Controller
                 ],
 
                 'response_config' => [
-                    'success_redirect_url' => 'https://www.youtube.com/watch?v=6C4yqJMvmz8&list=PLRB0wzP8AS_GfoZTiqsY1397H8LcXgkMZ&index=14',
+                    'success_redirect_url' => 'https://api.ipayfin.com/pages/new_payment_page_success.php',
                     'failure_redirect_url' => 'http://google.com',
                 ],
             ];
-
 
             $secureSign = $this->generateSignature($signingPayload, $this->mbmeConfig['key']);
 
             $payload = $signingPayload;
 
-            unset($payload['key'], $payload['algorithm']);
-
             $payload['secure_sign'] = $secureSign;
-
 
             $response = Http::withHeaders([
                 'Content-Type'  => 'application/json',
@@ -121,10 +117,15 @@ class MbmePaymentController extends Controller
                     'currency' => $validated['transaction_info']['currency']
                 ]);
 
-                return view('payment_iframe', [
-                    'oid' => $oid,
-                    'uid' => $this->mbmeConfig['uid'],
-                    'timestamp' => $timestamp
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Order created successfully',
+                    'data' => [
+                        'oid' => $oid,
+                        'uid' => $this->mbmeConfig['uid'],
+                        'timestamp' => $timestamp,
+                        'status' => $responseData['status']
+                    ]
                 ]);
             } else {
                 Log::error('MBME Order Creation Failed', [
@@ -139,12 +140,14 @@ class MbmePaymentController extends Controller
                     'error' => 'Order creation failed'
                 ], 400);
             }
+
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
                 'errors' => $e->errors()
             ], 422);
+
         } catch (\Exception $e) {
             Log::error('Payment Order Creation Error', [
                 'message' => $e->getMessage(),
@@ -190,11 +193,11 @@ class MbmePaymentController extends Controller
                 'customer_info'   => [
                     'name'               => $validated['customer_info']['name'],
                     'email'              => $validated['customer_info']['email'],
-                    'mobile_country_code' => $validated['customer_info']['mobile_country_code'],
+                    'mobile_country_code'=> $validated['customer_info']['mobile_country_code'],
                     'mobile_number'      => $validated['customer_info']['mobile_number'],
                 ],
 
-                'transaction_info' => [
+                'transaction_info'=> [
                     'amount'   => (string) $validated['transaction_info']['amount'],
                     'currency' => $validated['transaction_info']['currency'],
                 ],
@@ -225,7 +228,7 @@ class MbmePaymentController extends Controller
 
             $response = Http::withHeaders([
                 'Content-Type'  => 'application/json',
-                'Authorization' => 'Bearer ' . $this->mbmeConfig['bearer_token'],
+                'Authorization' => 'Bearer '.$this->mbmeConfig['bearer_token'],
             ])->timeout(30)->post($this->mbmeConfig['api_url'], $payload);
 
             if (!$response->successful()) {
@@ -285,12 +288,14 @@ class MbmePaymentController extends Controller
                     'status_code' => $responseData['status_code'] ?? null
                 ], 400);
             }
+
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
                 'errors' => $e->errors()
             ], 422);
+
         } catch (\Exception $e) {
             Log::error('Payment Link Creation Error', [
                 'message' => $e->getMessage(),
@@ -310,7 +315,7 @@ class MbmePaymentController extends Controller
         try {
             // Validate the incoming request
             $validated = $request->validate([
-                'oid' => 'required|string|max:255',
+                'oid'=> 'required|string|max:255',
             ]);
 
             $timestamp  = Carbon::now()->toISOString();
@@ -330,7 +335,7 @@ class MbmePaymentController extends Controller
 
             $response = Http::withHeaders([
                 'Content-Type'  => 'application/json',
-                'Authorization' => 'Bearer ' . $this->mbmeConfig['bearer_token'],
+                'Authorization' => 'Bearer '.$this->mbmeConfig['bearer_token'],
             ])->timeout(30)->post($this->mbmeConfig['api_url_payment'], $payload);
 
             if (!$response->successful()) {
@@ -347,6 +352,7 @@ class MbmePaymentController extends Controller
             }
 
             $responseData = $response->json();
+            dd($responseData);
             $data = $responseData['data'] ?? [];
 
             // Extract basic payment info
@@ -390,12 +396,14 @@ class MbmePaymentController extends Controller
                     'currency' => $currency,
                 ]
             ], 400);
+
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
                 'errors' => $e->errors()
             ], 422);
+
         } catch (\Exception $e) {
             Log::error('Payment Status Check Error', [
                 'message' => $e->getMessage(),
@@ -409,23 +417,6 @@ class MbmePaymentController extends Controller
             ], 500);
         }
     }
-    private function convertToKWD($amount, $currency)
-    {
-        $rates = [
-            'USD' => 0.31,
-            'AED' => 0.083,
-            'KWD' => 1,
-        ];
-
-        $amount = floatval($amount);
-        $currency = strtoupper($currency);
-
-        if (isset($rates[$currency])) {
-            return $amount * $rates[$currency];
-        }
-
-        return $amount;
-    }
 
     public function initiateRefundPayment(Request $request)
     {
@@ -433,21 +424,27 @@ class MbmePaymentController extends Controller
             // Validate the incoming request
             $validated = $request->validate([
                 'oid' => 'required|string|max:255',
+                'amount' => 'required|numeric|min:0.01',
+                'currency' => 'required|string|in:AED,USD,EUR', // Add currency validation
             ]);
 
-            $timestamp  = Carbon::now()->toISOString();
+            // Convert amount to AED before sending to API
+            $convertedAmount = $this->convertToKWD($validated['amount'], $validated['currency']);
+
+            $timestamp = Carbon::now()->toISOString();
 
             $signingPayload = [
-                'uid'             => $this->mbmeConfig['uid'],
-                'oid'             => $request->oid,
-                'timestamp'       => $timestamp,
-                'request_method'  => 'process_refund',
+                'uid'            => $this->mbmeConfig['uid'],
+                'oid'            => $validated['oid'],
+                'timestamp'      => $timestamp,
+                'amount'         => (string) $validated['amount'], // send converted AED amount
+                'request_method' => 'process_refund',
+                'refund_remarks' => 'partial refund'
             ];
 
             $secureSign = $this->generateSignature($signingPayload, $this->mbmeConfig['key']);
 
             $payload = $signingPayload;
-            unset($payload['key'], $payload['algorithm']);
             $payload['secure_sign'] = $secureSign;
 
             $response = Http::withHeaders([
@@ -469,7 +466,7 @@ class MbmePaymentController extends Controller
             }
 
             $responseData = $response->json();
-
+            dd($responseData);
             $data = $responseData['data'] ?? [];
 
             // Extract basic payment info
@@ -477,20 +474,21 @@ class MbmePaymentController extends Controller
             $statusMessage = $data['status_message'] ?? 'Unknown status';
             $cardLast4 = $data['card_last4'] ?? null;
             $amount = $data['amount'] ?? null;
-            $currency = $data['currency'] ?? null;
+            $currency = $validated['currency'] ?? 'AED';
 
-            $amountInKWD = $this->convertToKWD($amount, $currency);
-
+            $responseArray = [
+                'card_last4'        => $cardLast4,
+                'original_amount'   => $validated['amount'],
+                'original_currency' => $validated['currency'],
+                'converted_amount'  => $convertedAmount,
+                'final_currency'    => 'AED',
+            ];
 
             if (strtoupper($status) === 'APPROVED') {
                 return response()->json([
                     'success' => true,
                     'message' => $statusMessage,
-                    'data' => [
-                        'card_last4' => $cardLast4,
-                        'amount' => $amountInKWD,
-                        'currency' => "KWD",
-                    ]
+                    'data'    => $responseArray
                 ]);
             }
 
@@ -498,11 +496,7 @@ class MbmePaymentController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => $statusMessage,
-                    'data' => [
-                        'card_last4' => $cardLast4,
-                        'amount' => $amountInKWD,
-                        'currency' => "KWD",
-                    ]
+                    'data'    => $responseArray
                 ], 400);
             }
 
@@ -510,18 +504,16 @@ class MbmePaymentController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Unknown payment status',
-                'data' => [
-                    'card_last4' => $cardLast4,
-                    'amount' => $amountInKWD,
-                    'currency' => "KWD",
-                ]
+                'data'    => $responseArray
             ], 400);
+
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
                 'errors' => $e->errors()
             ], 422);
+
         } catch (\Exception $e) {
             Log::error('Payment Status Check Error', [
                 'message' => $e->getMessage(),
@@ -535,6 +527,7 @@ class MbmePaymentController extends Controller
             ], 500);
         }
     }
+
 
     /**
      * Generate a secure signature for MBME API
@@ -603,5 +596,23 @@ class MbmePaymentController extends Controller
         }
 
         return $result;
+    }
+
+    /**
+     * Convert USD/EUR to AED using static conversion rates.
+     * You can integrate a live currency API here later.
+     */
+    private function convertToKWD($amount, $currency)
+    {
+        // Example conversion rates to KWD
+        $rates = [
+            'KWD' => 1,
+            'USD' => 0.31, // 1 USD = 0.31 KWD (example rate)
+            'EUR' => 0.29, // 1 EUR = 0.29 KWD (example rate)
+            'AED' => 0.084 // 1 AED = 0.084 KWD (example rate)
+        ];
+
+        $rate = $rates[strtoupper($currency)] ?? 1;
+        return round($amount * $rate, 3); // using 3 decimals since KWD often uses 3
     }
 }
