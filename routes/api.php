@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\MbmePaymentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -17,3 +18,8 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
+
+Route::post('/refund', [MbmePaymentController::class, 'initiateRefundPayment']);
+Route::post('/create-order', [MbmePaymentController::class, 'createOrder']);
+Route::post('/create-payment-link', [MbmePaymentController::class, 'createPaymentLink']);
+Route::post('/payment-status', [MbmePaymentController::class, 'getStatusOfPayment']);
